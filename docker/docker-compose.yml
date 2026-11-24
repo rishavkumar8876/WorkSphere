@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # PostgreSQL 16 (Multi-Tenant System of Record)
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: worksphere-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: worksphere
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d worksphere"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worksphere-network
+
+  # ==========================================
+  # Redis 7 (Queues, Pub/Sub, Realtime Caching)
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: worksphere-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - worksphere-network
+
+volumes:
+  postgres_data:
+    name: worksphere_postgres_data
+  redis_data:
+    name: worksphere_redis_data
+
+networks:
+  worksphere-network:
+    name: worksphere-network
+    driver: bridge

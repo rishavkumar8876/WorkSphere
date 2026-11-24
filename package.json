@@ -1,0 +1,35 @@
+{
+  "name": "worksphere-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WorkSphere - Multi-Tenant Project Management & Workflow Automation Platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:api": "npm run build --workspace=apps/api",
+    "build:web": "npm run build --workspace=apps/web",
+    "test:api": "npm test --workspace=apps/api",
+    "test:web": "npm test --workspace=apps/web",
+    "test:python": "cd apps/analytics && pytest",
+    "prisma:generate": "npm run prisma:generate --workspace=apps/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace=apps/api",
+    "prisma:seed": "npm run prisma:seed --workspace=apps/api"
+  },
+  "keywords": [
+    "saas",
+    "multi-tenant",
+    "project-management",
+    "workflow-automation",
+    "nextjs",
+    "express",
+    "fastapi",
+    "postgresql",
+    "redis"
+  ],
+  "author": "WorkSphere Team",
+  "license": "ISC"
+}
