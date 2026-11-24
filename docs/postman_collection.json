@@ -1,0 +1,191 @@
+{
+  "info": {
+    "name": "WorkSphere SaaS API & Concurrency Test Suite",
+    "description": "Comprehensive Postman collection for WorkSphere multi-tenant platform, covering RBAC, OCC concurrency, WebSockets, and FastAPI analytics.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api/v1", "type": "string" },
+    { "key": "analyticsUrl", "value": "http://localhost:8000/api/v1", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "activeOrgId", "value": "", "type": "string" },
+    { "key": "createdTaskId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Login as Project Manager",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function() { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.environment.set('accessToken', json.data.tokens.accessToken);",
+                  "pm.environment.set('refreshToken', json.data.tokens.refreshToken);",
+                  "pm.environment.set('activeOrgId', json.data.user.organizationId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"pm@acme.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login" }
+          }
+        },
+        {
+          "name": "Get Profile (/auth/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "x-organization-id", "value": "{{activeOrgId}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/me" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Projects & Tasks (OCC Capstone)",
+      "item": [
+        {
+          "name": "List Projects",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "x-organization-id", "value": "{{activeOrgId}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/projects" }
+          }
+        },
+        {
+          "name": "Create Task (Initial Version = 1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function() { pm.response.to.have.status(201); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Initial OCC Version is 1', function() { pm.expect(json.data.version).to.eql(1); });",
+                  "pm.environment.set('createdTaskId', json.data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "x-organization-id", "value": "{{activeOrgId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"title\": \"Postman Capstone Task\",\n  \"status\": \"TODO\",\n  \"priority\": \"HIGH\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tasks" }
+          }
+        },
+        {
+          "name": "Update Task With Valid Version (Version 1 -> 2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function() { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Version bumped to 2', function() { pm.expect(json.data.version).to.eql(2); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "x-organization-id", "value": "{{activeOrgId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"version\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tasks/{{createdTaskId}}" }
+          }
+        },
+        {
+          "name": "Stale Update Conflict Test (Sends Version 1 -> Expect 409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 409 Conflict', function() { pm.response.to.have.status(409); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Error code is VERSION_CONFLICT', function() { pm.expect(json.error.code).to.eql('VERSION_CONFLICT'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "x-organization-id", "value": "{{activeOrgId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DONE\",\n  \"version\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tasks/{{createdTaskId}}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. FastAPI Analytics Engine",
+      "item": [
+        {
+          "name": "FastAPI Health & Readiness",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{analyticsUrl}}/healthz" }
+          }
+        },
+        {
+          "name": "Project Health Calculation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-API-Key", "value": "worksphere_internal_analytics_api_secret_key" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_id\": \"proj-101\",\n  \"project_name\": \"Postman Test Sprint\",\n  \"tasks\": []\n}"
+            },
+            "url": { "raw": "{{analyticsUrl}}/analytics/project-health" }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,223 @@
+openapi: 3.0.3
+info:
+  title: WorkSphere SaaS API Documentation
+  description: >
+    Official OpenAPI 3.0 specification for WorkSphere - Multi-Tenant Project Management &
+    Workflow Automation Platform. Covers Express Core REST API and Python FastAPI Analytics Engine.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Express Core REST API (Local Dev)
+  - url: http://localhost:8000/api/v1
+    description: FastAPI Analytics Engine (Local Dev)
+
+paths:
+  /auth/register:
+    post:
+      summary: Register user and tenant organization
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, firstName, lastName]
+              properties:
+                email: { type: string, format: email, example: "owner@company.com" }
+                password: { type: string, format: password, example: "Password123!" }
+                firstName: { type: string, example: "Alice" }
+                lastName: { type: string, example: "Smith" }
+                organizationName: { type: string, example: "Acme Corp" }
+      responses:
+        201:
+          description: User and organization registered successfully
+        400:
+          description: Validation error or email already in use
+
+  /auth/login:
+    post:
+      summary: Authenticate user and issue tokens
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: "admin@worksphere.io" }
+                password: { type: string, format: password, example: "Password123!" }
+      responses:
+        200:
+          description: Authentication successful (returns access token and refresh token)
+        401:
+          description: Invalid email or password credentials
+
+  /auth/refresh:
+    post:
+      summary: Refresh-token rotation (RTR) with family revocation
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        200:
+          description: New access and refresh token pair issued
+        401:
+          description: Invalid, expired, or compromised refresh token
+
+  /projects:
+    get:
+      summary: List projects for active tenant
+      tags: [Projects]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: header
+          name: x-organization-id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { type: string, enum: [PLANNING, ACTIVE, ON_HOLD, COMPLETED, ARCHIVED] }
+      responses:
+        200:
+          description: List of projects retrieved successfully
+    post:
+      summary: Create new project
+      tags: [Projects]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, key]
+              properties:
+                name: { type: string, example: "Platform Rollout" }
+                key: { type: string, example: "ROLL" }
+                description: { type: string }
+      responses:
+        201:
+          description: Project created successfully
+        403:
+          description: Insufficient permissions (Requires ORG_OWNER or PROJECT_MANAGER)
+
+  /tasks:
+    get:
+      summary: List tasks with filtering and pagination
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: projectId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { type: string, enum: [BACKLOG, TODO, IN_PROGRESS, IN_REVIEW, DONE] }
+      responses:
+        200:
+          description: Tasks retrieved successfully
+    post:
+      summary: Create task (sets initial version to 1)
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId, title]
+              properties:
+                projectId: { type: string, format: uuid }
+                title: { type: string, example: "Implement webhook retry policy" }
+                description: { type: string }
+                priority: { type: string, enum: [LOW, MEDIUM, HIGH, URGENT] }
+      responses:
+        201:
+          description: Task created with version 1
+
+  /tasks/{id}:
+    patch:
+      summary: Optimistic Concurrency Control (OCC) Task Update
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                status: { type: string, enum: [BACKLOG, TODO, IN_PROGRESS, IN_REVIEW, DONE] }
+                priority: { type: string, enum: [LOW, MEDIUM, HIGH, URGENT] }
+                version:
+                  type: integer
+                  description: Expected current version number of the task on the server
+                  example: 1
+      responses:
+        200:
+          description: Task updated successfully and version incremented
+        409:
+          description: Version conflict! The task was modified concurrently by another user.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: false }
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, example: "VERSION_CONFLICT" }
+                      message: { type: string }
+                      details: { description: "Current server task snapshot" }
+
+  /audit-logs:
+    get:
+      summary: Query compliance audit trail
+      tags: [Audit & Compliance]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: action
+          schema: { type: string, enum: [CREATE, UPDATE, DELETE, LOGIN, EXPORT] }
+      responses:
+        200:
+          description: Audit logs retrieved
+        403:
+          description: Forbidden (Only AUDITOR and ORG_OWNER permitted)
+
+  /analytics/project-health:
+    post:
+      summary: FastAPI project health calculation
+      tags: [Analytics Engine]
+      security: [{ ApiKeyAuth: [] }]
+      responses:
+        200:
+          description: Health score, completion velocity, and risk analysis
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
