@@ -1,18 +1,41 @@
+import http from 'http';
 import { createApp } from './app';
 import { config } from './config';
 import logger from './utils/logger';
 import prisma from './config/database';
+import { socketServer } from './sockets/socket.server';
+import { workerService } from './workers/worker.service';
 
 const app = createApp();
+const httpServer = http.createServer(app);
 
-const server = app.listen(config.port, () => {
+// Initialize real-time Socket.IO gateway
+socketServer.init(httpServer);
+
+// Initialize background queue workers if Redis is enabled
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    workerService.start();
+  } catch (err) {
+    logger.warn('Worker initialization skipped:', (err as Error).message);
+  }
+}
+
+const server = httpServer.listen(config.port, () => {
   logger.info(`🚀 WorkSphere Core API running on port ${config.port} [Environment: ${config.env}]`);
-  logger.info(`🔗 Base URL: http://localhost:${config.port}/api/v1`);
+  logger.info(`🔗 Base REST URL: http://localhost:${config.port}/api/v1`);
+  logger.info(`⚡ Realtime Socket.IO: http://localhost:${config.port}/socket.io`);
 });
 
 // Graceful shutdown handling
 const gracefulShutdown = async (signal: string) => {
   logger.info(`Received ${signal}. Initiating graceful shutdown...`);
+  try {
+    await workerService.close();
+  } catch (e) {
+    // Ignore worker close errors during exit
+  }
+
   server.close(async () => {
     logger.info('HTTP server closed.');
     try {
